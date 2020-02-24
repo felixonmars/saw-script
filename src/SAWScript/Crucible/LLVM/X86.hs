@@ -411,7 +411,7 @@ executePointsTo ::
   Mem ->
   LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
   IO Mem
-executePointsTo sym cc env tyenv nameEnv mem (LLVMPointsTo _ tptr tval) = do
+executePointsTo sym cc env tyenv nameEnv mem (LLVMPointsTo _ _cond tptr tval) = do
   ptr <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
     =<< resolveSetupVal cc mem env tyenv Map.empty tptr
   val <- resolveSetupVal cc mem env tyenv Map.empty tval
@@ -506,7 +506,7 @@ assertPointsTo ::
   Mem ->
   LLVMPointsTo LLVMArch {- ^ crucible_points_to statement from the precondition -} ->
   IO ()
-assertPointsTo sym opts cc env tyenv nameEnv mem (LLVMPointsTo _ tptr texpected) = do
+assertPointsTo sym opts cc env tyenv nameEnv mem (LLVMPointsTo _ _cond tptr texpected) = do
   ptr <- C.LLVM.unpackMemValue sym (C.LLVM.LLVMPointerRepr $ knownNat @64)
     =<< resolveSetupVal cc mem env tyenv Map.empty tptr
   storTy <- C.LLVM.toStorableType =<< typeOfSetupValue cc tyenv nameEnv texpected

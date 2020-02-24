@@ -28,6 +28,7 @@ module SAWScript.Crucible.Common.Override
   , overrideGlobals
   , syminterface
   , setupValueSub
+  , setupValueUndef
   , termSub
   --
   , OverrideFailureReason(..)
@@ -61,6 +62,7 @@ import           Control.Monad.IO.Class
 import           Data.Kind (Type)
 import           Data.Map (Map)
 import           Data.Set (Set)
+import qualified Data.Set as Set
 import           Data.Typeable (Typeable)
 import           GHC.Generics (Generic, Generic1)
 import qualified Text.PrettyPrint.ANSI.Leijen as PP
@@ -94,6 +96,9 @@ type family Pointer ext :: Type
 data OverrideState ext = OverrideState
   { -- | Substitution for memory allocations
     _setupValueSub :: Map AllocIndex (Pointer ext)
+
+  , -- | Memory allocations that are marked as undefined by the matcher
+    _setupValueUndef :: Set AllocIndex
 
     -- | Substitution for SAW Core external constants
   , _termSub :: Map VarIndex Term
@@ -137,6 +142,7 @@ initialState sym globals allocs terms free loc = OverrideState
   , _termSub         = terms
   , _osFree          = free
   , _setupValueSub   = allocs
+  , _setupValueUndef = Set.empty
   , _osLocation      = loc
   }
 

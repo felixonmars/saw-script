@@ -189,7 +189,7 @@ ppPointsToAsLLVMVal ::
   MS.CrucibleMethodSpecIR (LLVM arch) {- ^ for name and typing environments -} ->
   PointsTo (LLVM arch) ->
   OverrideMatcher (LLVM arch) w PP.Doc
-ppPointsToAsLLVMVal opts cc sc spec (LLVMPointsTo loc setupVal1 setupVal2) = do
+ppPointsToAsLLVMVal opts cc sc spec (LLVMPointsTo loc _cond setupVal1 setupVal2) = do
   pretty1 <- ppSetupValueAsLLVMVal opts cc sc spec setupVal1
   let pretty2 = MS.ppSetupValue setupVal2
   pure $ PP.vcat [ PP.text "Pointer:" PP.<+> pretty1
@@ -801,8 +801,8 @@ matchPointsTos opts sc cc spec prepost = go False []
     go True delayed [] = go False [] delayed
 
     -- progress the next points-to in the work queue
-    go progress delayed (c@(LLVMPointsTo loc _ _):cs) =
-      do ready <- checkPointsTo c
+    go progress delayed (c@(LLVMPointsTo loc _ ptr _):cs) =
+      do ready <- checkSetupValue ptr
          if ready then
            do err <- learnPointsTo opts sc cc spec prepost c
               case err of
@@ -814,13 +814,11 @@ matchPointsTos opts sc cc spec prepost = go False []
            do go progress (c:delayed) cs
 
     -- determine if a precondition is ready to be checked
-    checkPointsTo :: PointsTo (LLVM arch) -> OverrideMatcher (LLVM arch) md Bool
-    checkPointsTo (LLVMPointsTo _loc p _) = checkSetupValue p
-
     checkSetupValue :: SetupValue (Crucible.LLVM arch) -> OverrideMatcher (LLVM arch) md Bool
     checkSetupValue v =
       do m <- OM (use setupValueSub)
-         return (all (`Map.member` m) (setupVars v))
+         s <- OM (use setupValueUndef)
+         return (all (\x -> Map.member x m || Set.member x s) (setupVars v))
 
     -- Compute the set of variable identifiers in a 'SetupValue'
     setupVars :: SetupValue (Crucible.LLVM arch) -> Set AllocIndex
@@ -1161,7 +1159,7 @@ learnPointsTo ::
   PrePost                    ->
   PointsTo (LLVM arch)       ->
   OverrideMatcher (LLVM arch) md (Maybe PP.Doc)
-learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc ptr val) =
+learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc maybe_cond ptr val) =
   do let tyenv = MS.csAllocations spec
          nameEnv = MS.csTypeNames spec
      memTy <- liftIO $ typeOfSetupValue cc tyenv nameEnv val
@@ -1194,7 +1192,12 @@ learnPointsTo opts sc cc spec prepost (LLVMPointsTo loc ptr val) =
            (Proxy @(Crucible.LLVM arch))
            sym
            assertion_tree
-         addAssert pred_ $ Crucible.SimError loc $
+         pred_' <- liftIO $ case maybe_cond of
+           Just cond -> do
+             cond' <- resolveSAWPred cc (ttTerm cond)
+             W4.impliesPred sym cond' pred_
+           Nothing -> return pred_
+         addAssert pred_' $ Crucible.SimError loc $
            Crucible.AssertFailureSimError (show $ PP.vcat $ summarizeBadLoad) ""
          pure Nothing <* matchArg opts sc cc spec prepost res_val memTy val
        W4.Err _err -> do
